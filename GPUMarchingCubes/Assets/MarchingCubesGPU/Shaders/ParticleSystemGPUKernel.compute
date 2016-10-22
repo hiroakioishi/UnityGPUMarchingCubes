@@ -1,0 +1,93 @@
+﻿#pragma kernel InitCS
+#pragma kernel UpdateCS
+
+// ---------------------------------------------------------------
+// Structures
+// ---------------------------------------------------------------
+struct Particle
+{
+	float3 velocity; // better float4
+	float3 position; // better float4
+	float4 color;
+	float  lifetime; // better float4
+};
+
+// ---------------------------------------------------------------
+// Variables
+// ---------------------------------------------------------------
+StructuredBuffer<Particle>   _ParticleBufferRO;
+RWStructuredBuffer<Particle> _ParticleBufferRW;
+
+RWTexture3D<float> _DataFieldTexRW;
+
+float  _LifeTimeMin;
+float  _LifeTimeMax;
+
+float  _TimeStep;
+float3 _Gravity;
+
+#define PI 3.14159265359
+
+// ---------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------
+float nrand(float2 co){
+    return frac(sin(dot(co.xy, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+float3 randomInsideUnitSphere (float2 co) {
+  
+	float phi = 2 * PI * nrand(float2(co.x, co.y + 0));
+	float th  = acos(1.0 - 2.0 * nrand(float2(co.x, co.y + 1)));
+	float r   = pow(nrand(float2(co.x, co.y + 2)), 0.333333333);
+  
+	float x = r * sin(th) * cos(phi);
+	float y = r * sin(th) * sin(phi);
+	float z = r * cos(th);
+  
+	return float3(x, y, z);
+}
+
+// ---------------------------------------------------------------
+// Kernels
+// ---------------------------------------------------------------
+[numthreads(32,1,1)]
+void InitCS (uint3 id : SV_DispatchThreadID)
+{
+	//Result[id.xy] = float4(id.x & id.y, (id.x & 15)/15.0, (id.y & 15)/15.0, 0.0);
+}
+
+[numthreads(32,1,1)]
+void UpdateCS (uint3 id : SV_DispatchThreadID)
+{
+	int idx = id.x;
+	float3 position = _ParticleBufferRO[idx].position;
+	float3 velocity = _ParticleBufferRO[idx].velocity;
+
+	float  life     = _ParticleBufferRO[idx].lifetime;
+
+	if (life > (_LifeTimeMin + nrand(float2(id.x, id.y + 3)) * (_LifeTimeMax - _LifeTimeMin))) {
+		
+		position = float3(0,0,0);
+		velocity = 0.05 * randomInsideUnitSphere(float2(id.x, id.y));
+		life = 0.0;
+
+	} else {
+
+		velocity += _Gravity;
+		position += velocity * _TimeStep;
+
+		if (position.y < -1.0)
+		{
+			velocity.y *= -1.0;
+			position.y += 0.01;
+		}
+
+		life += _TimeStep;
+	}
+
+	_ParticleBufferRW[idx].velocity = velocity;
+	_ParticleBufferRW[idx].position = position;
+	_ParticleBufferRW[idx].lifetime = life;
+
+}

@@ -1,0 +1,60 @@
+﻿#pragma kernel ClearDataFieldCS
+#pragma kernel UpdateDataFieldCS
+
+// ---------------------------------------------------------------
+// Structures
+// ---------------------------------------------------------------
+struct Particle
+{
+	float3 velocity;
+	float3 position;
+	float4 color;
+	float  lifetime;
+};
+
+// ---------------------------------------------------------------
+// Variables
+// ---------------------------------------------------------------
+StructuredBuffer<Particle>   _ParticleBufferRO;
+RWTexture3D<float> _DataFieldTexRW;
+
+int3   _GridNum;
+float3 _GridCenter;
+float3 _GridSize;
+
+// ---------------------------------------------------------------
+// Functions
+// ---------------------------------------------------------------
+float nrand(float2 co){
+    return frac(sin(dot(co.xy, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+int3 getVolumeIndex (float3 pos) {
+	pos = (pos + _GridSize * 0.5) / _GridSize;
+	
+	float3 gridStep = 1.0 / _GridNum;
+	return int3
+	(
+		(int)(pos.x / gridStep.x),
+		(int)(pos.y / gridStep.y),
+		(int)(pos.z / gridStep.z)
+	);
+}
+
+// ---------------------------------------------------------------
+// Kernels
+// ---------------------------------------------------------------
+[numthreads(8,8,8)]
+void ClearDataFieldCS (uint3 id : SV_DispatchThreadID)
+{
+	_DataFieldTexRW[id] = 0.0;
+}
+
+[numthreads(32,1,1)]
+void UpdateDataFieldCS (uint3 id : SV_DispatchThreadID)
+{
+	int idx = id.x + id.y * 8 + id.z * 64;
+	uint3 volumeIndex = (uint3)getVolumeIndex(_ParticleBufferRO[idx].position);
+
+	_DataFieldTexRW[volumeIndex] = 1.0;
+}
