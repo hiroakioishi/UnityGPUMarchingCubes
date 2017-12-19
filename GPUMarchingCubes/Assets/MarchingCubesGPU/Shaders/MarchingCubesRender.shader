@@ -39,6 +39,7 @@ Shader "Hidden/GPUMarchingCubes/Render"
 	sampler3D _DataFieldTex;
 
 	float3 _DataStep;
+	int3   _GridSize;
 
 	StructuredBuffer<SimpleVertex> _VertexBuffer;
 	StructuredBuffer<int>          _TriTableBuffer;
@@ -66,6 +67,27 @@ Shader "Hidden/GPUMarchingCubes/Render"
 	{
 		float lerper = (isoLevel - l0) / (l1 - l0);
 		return lerp(v0, v1, lerper);
+	}
+
+	// 三角メッシュの法線計算（外積使用）
+	float3 calcNormal(float3 v0, float3 v1, float3 v2)
+	{
+		float3 edge0 = v1 - v0;
+		float3 edge1 = v2 - v0;
+		return cross(edge0, edge1);
+	}
+
+	// ボリュームデータからの法線計算
+	float3 calcNormalF(float3 pos)
+	{
+		float3 nrm;
+		float3 p;
+		float3 m;
+
+		float3 d = 0.2 * _DataStep;
+
+		//p.x = vertexInterp()
+		return float3(0, 0, 0);
 	}
 
 	// Gets a value from the look-up table
@@ -110,7 +132,6 @@ Shader "Hidden/GPUMarchingCubes/Render"
 		cubeVal[6] = tex3Dlod(_DataFieldTex, float4(((cubePos[6] + 1.0) / 2.0), 0.0)).r;
 		cubeVal[7] = tex3Dlod(_DataFieldTex, float4(((cubePos[7] + 1.0) / 2.0), 0.0)).r;
 
-		// Determine the index into the edge table which tells us which vertices are inside of the surface
 		// Cubeの値から三角形形成データのインデックスを求める
 		cubeindex =  int(cubeVal[0] < isolevel);
 		cubeindex += int(cubeVal[1] < isolevel) << 1;
@@ -129,7 +150,6 @@ Shader "Hidden/GPUMarchingCubes/Render"
 		}
 
 		// 正規化Cubeの辺上の座標を求める
-		// Find the vertices where the surface intersects the cube
 		float3 vertlist[12];	
 		// float3 vertexInterp(float isoLevel, float3 v0, float l0, float3 v1, float l1)
 		vertlist[0]  = vertexInterp(isolevel, cubePos[0], cubeVal[0], cubePos[1], cubeVal[1]);
@@ -157,9 +177,7 @@ Shader "Hidden/GPUMarchingCubes/Render"
 				g2f p2 = (g2f)0;
 
 				// 法線を求める
-				float3 v0 = vertlist[triTableValue(cubeindex, i + 1)] - vertlist[tri1];
-				float3 v1 = vertlist[triTableValue(cubeindex, i + 2)] - vertlist[tri1];
-				float3 norm = normalize(cross(v0, v1));
+				float3 norm = calcNormal(vertlist[tri1], vertlist[triTableValue(cubeindex, i + 1)], vertlist[triTableValue(cubeindex, i + 2)]);
 
 				p0.worldPos = float4(vertlist[tri1], 1);
 				p0.pos    = mul(UNITY_MATRIX_MVP, p0.worldPos);
@@ -196,7 +214,7 @@ Shader "Hidden/GPUMarchingCubes/Render"
 		float3 ambientMaterial  = _AmbientColor.rgb;
 
 		float3 lightDir = normalize(_LightPos.xyz - i.worldPos.xyz);
-		float3 norm     = i.normal.xyz;// -normalize(i.normal.xyz);
+		float3 norm     = normalize(i.normal.xyz);
 		
 		float3 eyeDir  = normalize(_WorldSpaceCameraPos.xyz - mul(unity_ObjectToWorld, i.worldPos).xyz);
 		float3 halfDir = normalize(lightDir + eyeDir);
